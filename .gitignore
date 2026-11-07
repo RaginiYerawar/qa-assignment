@@ -1,0 +1,5 @@
+node_modules/
+test-results/
+playwright-report/
+todo-app/data/
+.DS_Store
