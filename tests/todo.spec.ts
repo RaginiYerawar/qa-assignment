@@ -61,3 +61,26 @@ test.describe('Frontend', () => {
     await expect(todo).toHaveCount(0);
   });
 });
+
+test.describe('API', () => {
+  test('POST /api/todos rejects invalid text with 400', async ({ request }) => {
+    // Known bug BUG-006: POST does not validate text and returns 201.
+    // README: text must be 1 to 256 characters and not only spaces, otherwise 400.
+    test.fail(true, 'Known bug BUG-006: POST accepts empty, spaces-only and too long text');
+    const invalidTexts = ['', '   ', 'a'.repeat(257)];
+    const createdIds: string[] = [];
+
+    try {
+      for (const text of invalidTexts) {
+        const res = await request.post('/api/todos', { data: { text } });
+        if (res.status() === 201) createdIds.push((await res.json()).id);
+
+        expect(res.status(), `text with ${text.length} characters`).toBe(400);
+        expect(await res.json()).toHaveProperty('error');
+      }
+    } finally {
+      // These texts do not start with "qa-test-", so remove what the bug let through.
+      for (const id of createdIds) await request.delete(`/api/todos/${id}`);
+    }
+  });
+});
