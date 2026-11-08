@@ -9,6 +9,15 @@ import { test, expect } from '@playwright/test';
 // fail today. When the bug is fixed they "pass unexpectedly" and the run turns red:
 // remove test.fail() then.
 
+// Cleanup: remove the todos this suite created, also when a test fails on a known bug.
+// Only todos with our "qa-test-" prefix are deleted, other data is left alone.
+test.afterEach(async ({ request }) => {
+  const todos: { id: string; text: string }[] = await (await request.get('/api/todos')).json();
+  for (const todo of todos.filter((t) => t.text.startsWith('qa-test-'))) {
+    await request.delete(`/api/todos/${todo.id}`);
+  }
+});
+
 test.describe('Frontend', () => {
   test('a new todo can be completed and stays completed after reload', async ({ page }) => {
     // Known bug BUG-003: a todo added in the UI keeps a client-made ID, so the PATCH
@@ -26,5 +35,29 @@ test.describe('Frontend', () => {
 
     await page.reload();
     await expect(todo.getByRole('checkbox')).toBeChecked();
+  });
+
+  test('"Clear completed" permanently removes completed todos', async ({ page, request }) => {
+    // Known bug BUG-002: the link only changes the page, it sends no request to the
+    // server, so the completed todos come back after reload.
+    test.fail(true, 'Known bug BUG-002: Clear completed does not delete on the server');
+    const text = `qa-test-${Date.now()}`;
+
+    // Setup through the API: create a todo and mark it completed.
+    const created = await request.post('/api/todos', { data: { text } });
+    expect(created.status()).toBe(201);
+    const { id } = await created.json();
+    const patched = await request.patch(`/api/todos/${id}`, { data: { completed: true } });
+    expect(patched.status()).toBe(200);
+
+    await page.goto('/');
+    const todo = page.locator('li.todo-item', { hasText: text });
+    await expect(todo).toBeVisible();
+
+    await page.getByText('Clear completed').click();
+    await expect(todo).toHaveCount(0);
+
+    await page.reload();
+    await expect(todo).toHaveCount(0);
   });
 });
